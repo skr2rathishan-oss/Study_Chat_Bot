@@ -10,9 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 
-# ==========================
-# Load Environment Variables
-# ==========================
 load_dotenv()
 groq_api_key = os.getenv("GROQ_API_KEY")
 mongo_uri = os.getenv("MONGO_URL")
@@ -23,29 +20,20 @@ if not groq_api_key:
 if not mongo_uri:
     raise ValueError("MONGO_URL not found in environment variables")
 
-# ==========================
-# MongoDB Setup
-# ==========================
 client = MongoClient(mongo_uri)
 db = client["study_bot"]
 collection = db["conversations"]
 
-# ==========================
-# FastAPI App
-# ==========================
 app = FastAPI(title="Study Bot API", version="1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For development only
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True
 )
 
-# ==========================
-# Pydantic Models
-# ==========================
 class ChatRequest(BaseModel):
     user_id: str
     question: str
@@ -63,9 +51,6 @@ class MessageHistory(BaseModel):
     timestamp: datetime
 
 
-# ==========================
-# Study Assistant System Prompt
-# ==========================
 SYSTEM_PROMPT = """
 You are a strict Academic Study Assistant.
 
@@ -87,9 +72,6 @@ No emojis.
 No casual conversation.
 """
 
-# ==========================
-# LangChain Setup
-# ==========================
 prompt = ChatPromptTemplate.from_messages([
     ("system", SYSTEM_PROMPT),
     ("placeholder", "{history}"),
@@ -99,15 +81,11 @@ prompt = ChatPromptTemplate.from_messages([
 chat = ChatGroq(
     groq_api_key=groq_api_key,
     model="llama-3.3-70b-versatile",
-    temperature=0.3  # Lower temperature for academic precision
+    temperature=0.3
 )
 
 chain = prompt | chat
 
-
-# ==========================
-# Helper Functions
-# ==========================
 
 def get_chat_history(user_id: str, limit: int = 6):
     """
@@ -118,7 +96,7 @@ def get_chat_history(user_id: str, limit: int = 6):
                           .sort("timestamp", -1) \
                           .limit(limit * 2)
 
-        chats = list(chats)[::-1]  # Oldest first
+        chats = list(chats)[::-1]
         history = []
 
         for chat_doc in chats:
@@ -153,10 +131,6 @@ def save_message(user_id: str, role: str, message: str):
         raise HTTPException(status_code=500, detail="Database error")
 
 
-# ==========================
-# Routes
-# ==========================
-
 @app.get("/")
 def home():
     return {
@@ -175,10 +149,8 @@ def home():
 @app.post("/chat", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
     try:
-        # 1️⃣ Get previous history FIRST (avoid duplication bug)
         history = get_chat_history(request.user_id, limit=6)
 
-        # 2️⃣ Call LLM
         response = chain.invoke({
             "history": history,
             "question": request.question
@@ -186,7 +158,6 @@ def chat_endpoint(request: ChatRequest):
 
         ai_response = response.content
 
-        # 3️⃣ Save both messages AFTER response
         save_message(request.user_id, "user", request.question)
         save_message(request.user_id, "assistant", ai_response)
 
@@ -254,9 +225,6 @@ def get_stats(user_id: str):
         raise HTTPException(status_code=500, detail=f"Error getting stats: {str(e)}")
 
 
-# ==========================
-# Run Local Server
-# ==========================
 if __name__ == "__main__":
     import uvicorn
 
