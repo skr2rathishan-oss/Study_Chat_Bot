@@ -1,0 +1,10 @@
+numpy
+langchain
+langchain-groq
+langchain_core
+langchain_community
+pymongo
+fastapi
+uvicorn
+python-multipart
+python-dotenv
