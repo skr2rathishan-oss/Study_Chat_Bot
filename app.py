@@ -43,6 +43,7 @@ class ChatResponse(BaseModel):
     response: str
     user_id: str
     timestamp: datetime
+    tokens_used: int = 0
 
 
 class MessageHistory(BaseModel):
@@ -115,7 +116,7 @@ def get_chat_history(user_id: str, limit: int = 6):
         return []
 
 
-def save_message(user_id: str, role: str, message: str):
+def save_message(user_id: str, role: str, message: str, tokens: int = 0):
     """
     Save message to MongoDB
     """
@@ -124,7 +125,8 @@ def save_message(user_id: str, role: str, message: str):
             "user_id": user_id,
             "role": role,
             "message": message,
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.utcnow(),
+            "tokens": tokens
         })
     except Exception as e:
         print(f"Error saving message: {e}")
@@ -149,6 +151,9 @@ def home():
 @app.post("/chat", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
     try:
+        if not request.question.strip():
+            raise HTTPException(status_code=400, detail="Question cannot be empty")
+
         history = get_chat_history(request.user_id, limit=6)
 
         response = chain.invoke({
@@ -157,14 +162,16 @@ def chat_endpoint(request: ChatRequest):
         })
 
         ai_response = response.content
+        tokens_used = response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
 
         save_message(request.user_id, "user", request.question)
-        save_message(request.user_id, "assistant", ai_response)
+        save_message(request.user_id, "assistant", ai_response, tokens_used)
 
         return ChatResponse(
             response=ai_response,
             user_id=request.user_id,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
+            tokens_used=tokens_used
         )
 
     except Exception as e:
