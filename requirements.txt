@@ -6,4 +6,3 @@ langchain_community
 pymongo
 fastapi
 uvicorn
-python-multipart
